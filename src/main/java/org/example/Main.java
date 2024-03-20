@@ -4,10 +4,7 @@ import com.google.gson.Gson;
 
 import java.io.FileReader;
 import java.io.Reader;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.PriorityQueue;
+import java.util.*;
 
 public class Main
 {
@@ -21,9 +18,9 @@ public class Main
     public static void main(String... args)
     {
         Main m = new Main();
-        m.calc();
+        Pair<ArrayList<Pair<Double, Double>>, Double> path = m.getPath(new Pair<>(50.9272391, 5.6877452), new Pair<>(50.7760463, 5.7882736));
     }
-    public void calc()
+    public Main()
     {
         try (Reader reader = new FileReader("MapNodes.json")) {
             map = gson.fromJson(reader, MapJson.class);
@@ -62,59 +59,129 @@ public class Main
 
         for (int i = 0; i < clusters.size(); i++) {
             for (int j = 0; j < clusters.get(i).size(); j++) {
-                if (nodeAssignment.get(clusters.get(i).get(j).id).size() == 1) continue;
+                //if (nodeAssignment.get(clusters.get(i).get(j).id).size() == 1) continue;
                 ArrayList<Pair<Node, Double>> adj = new ArrayList<>();
                 for (int k = 0; k < clusters.get(i).size(); k++) {
                     if (clusters.get(i).get(j) == clusters.get(i).get(k)) continue;
                     Double distance = 6378160 * 2 * Math.asin(
                             Math.sqrt(
                                     Math.pow(Math.sin(Math.toRadians((clusters.get(i).get(j).location.lat - clusters.get(i).get(k).location.lat) / 2)), 2) +
-                                            Math.cos(Math.toRadians(clusters.get(i).get(j).location.lat)) * Math.cos(Math.toRadians(clusters.get(i).get(k).location.lat)) *
-                                                    Math.pow(Math.sin(Math.toRadians((clusters.get(i).get(j).location.lon - clusters.get(i).get(k).location.lon) / 2)), 2)
+                                    Math.cos(Math.toRadians(clusters.get(i).get(j).location.lat)) * Math.cos(Math.toRadians(clusters.get(i).get(k).location.lat)) *
+                                    Math.pow(Math.sin(Math.toRadians((clusters.get(i).get(j).location.lon - clusters.get(i).get(k).location.lon) / 2)), 2)
                             )
                     );
-                    if (distance > 1000D || nodeAssignment.get(clusters.get(i).get(k).id).size() == 1) continue;
+                    if (distance > 150D) continue;
                     adj.add(new Pair<>(clusters.get(i).get(k), distance));
                 }
                 clusters.get(i).get(j).adjList.addAll(adj);
             }
         }
 
-//        for (Pair<Node, Double> n : nodes.get(1).adjList) {
-//            System.out.println(n.first.id);
-//            System.out.println(n.second);
-//        }
-//
-//        PriorityQueue<Pair<Node, Double>> minHeap = new PriorityQueue<>(Comparator.comparingDouble(p -> p.second));
-//        nodes.get(0).adjList.forEach(minHeap::offer);
-//
-//        while (!minHeap.isEmpty()) {
-//            Pair<Node, Double> min = minHeap.poll();
-//            Node node = min.first;
-//            double distance = min.second;
-//            if (node.visited) continue;
-//            node.visited = true;
-//            //System.out.println("Node: " + node.id + ", Distance: " + distance);
-//
-//            for (Pair<Node, Double> neighborPair : node.adjList) {
-//                Node neighbor = neighborPair.first;
-//                double weight = neighborPair.second;
-//                if (!neighbor.visited) {
-//                    minHeap.offer(new Pair<>(neighbor, distance + weight));
-//                }
-//            }
-//        }
-        dfs(clusters.get(0).get(0), 0);
+        //Pair<ArrayList<Long>, Double> res = dijkstra(nodes.get(0), idToNode.get(5054934211L));
+        //Pair<ArrayList<Pair<Double, Double>>, Double> path = getPath(new Pair<>(nodes.get(0).location.lat, nodes.get(0).location.lon), new Pair<>(idToNode.get(5054934211L).location.lat, idToNode.get(5054934211L).location.lon));
     }
-    void dfs(Node node, int it)
+
+    private Map<Long, Long> parentMap = new HashMap<>();
+    private Map<Long, Double> distanceMap = new HashMap<>();
+
+    public Pair<ArrayList<Long>, Double> dijkstra(Node source, Node destination)
     {
-        node.visited = true;
-        for (Pair<Node, Double> nextPair: node.adjList)
+        PriorityQueue<Pair<Node, Double>> minHeap = new PriorityQueue<>(Comparator.comparingDouble(p -> p.second));
+        distanceMap.put(source.id, 0.0);
+        minHeap.offer(new Pair<>(source, 0.0));
+
+        while (!minHeap.isEmpty())
         {
-            if (!nextPair.first.visited) dfs(nextPair.first, ++it);
+            Pair<Node, Double> min = minHeap.poll();
+            Node node = min.first;
+            double distance = min.second;
+
+            if (node == destination)
+            {
+                ArrayList<Long> path = new ArrayList<>();
+                long current = destination.id;
+                while (current != source.id)
+                {
+                    path.add(current);
+                    current = parentMap.get(current);
+                }
+                path.add(source.id);
+                Collections.reverse(path);
+                System.out.println("Shortest Path: " + path);
+                System.out.println("Shortest Distance: " + distanceMap.get(destination.id));
+                return new Pair<>(path, distanceMap.get(destination.id));
+            }
+
+            for (Pair<Node, Double> neighborPair : node.adjList)
+            {
+                Node neighbor = neighborPair.first;
+                double weight = neighborPair.second;
+                double newDistance = distance + weight;
+
+                if (!distanceMap.containsKey(neighbor.id) || newDistance < distanceMap.get(neighbor.id))
+                {
+                    distanceMap.put(neighbor.id, newDistance);
+                    parentMap.put(neighbor.id, node.id);
+                    minHeap.offer(new Pair<>(neighbor, newDistance));
+                }
+            }
         }
-        System.out.println(node.id + " " + it);
+        return new Pair<>();
     }
+
+    public Pair<ArrayList<Pair<Double, Double>>, Double> getPath(Pair<Double, Double> start, Pair<Double, Double> dest)
+    {
+        Long startId = getClosestNode(start);
+        Long destId = getClosestNode(dest);
+
+        Pair<ArrayList<Long>, Double> res = dijkstra(idToNode.get(startId), idToNode.get(destId));
+        ArrayList<Pair<Double, Double>> coordinates = new ArrayList<>();
+        for (Long id: res.first)
+        {
+            coordinates.add(new Pair<>(idToNode.get(id).location.lat, idToNode.get(id).location.lon));
+        }
+        Double distance = res.second + getDistance(start, coordinates.get(0)) + getDistance(dest, coordinates.get(coordinates.size() - 1));
+        return new Pair<>(coordinates, distance);
+    }
+
+    private Double getDistance(Pair<Double, Double> start, Pair<Double, Double> end)
+    {
+        Double distance = 6378160 * 2 * Math.asin(
+                Math.sqrt(
+                        Math.pow(Math.sin(Math.toRadians((start.first - end.first) / 2)), 2) +
+                        Math.cos(Math.toRadians(start.first)) * Math.cos(Math.toRadians(end.first)) *
+                        Math.pow(Math.sin(Math.toRadians((start.second - end.second) / 2)), 2)
+                )
+        );
+        return distance;
+    }
+
+    private Long getClosestNode(Pair<Double, Double> point)
+    {
+        Node bestNode = clusters.get(0).get(0);
+        Double bestValue = Double.MAX_VALUE;
+
+        for (Node node : nodes)
+        {
+            Double value = Math.abs(point.first - node.location.lat) + Math.abs(point.second - node.location.lon);
+            if (value < bestValue)
+            {
+                bestNode = node;
+                bestValue = value;
+            }
+        }
+        return bestNode.id;
+    }
+
+//    void dfs(Node node, int it)
+//    {
+//        node.visited = true;
+//        for (Pair<Node, Double> nextPair: node.adjList)
+//        {
+//            if (!nextPair.first.visited) dfs(nextPair.first, ++it);
+//        }
+//        System.out.println(node.id + " " + it);
+//    }
 }
 class MapJson
 {
